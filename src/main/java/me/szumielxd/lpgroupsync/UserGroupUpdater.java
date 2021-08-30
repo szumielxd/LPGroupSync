@@ -1,11 +1,13 @@
 package me.szumielxd.lpgroupsync;
 
+import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -50,36 +52,38 @@ public class UserGroupUpdater {
 			HashMap<UUID, List<InheritanceNode>> toRemove = future.get().entrySet().stream().collect(Collectors.toMap(e -> e.getKey(),
 					e -> e.getValue().stream().map(InheritanceNode.class::cast).filter(n -> this.mappings.containsValue(n.getGroupName()))
 					.collect(Collectors.toCollection(ArrayList::new)), (a,b) -> b, HashMap::new));
-			HashMap<UUID, Set<InheritanceNode>> toAdd = new HashMap<>();
-			HashMap<UUID, Set<InheritanceNode>> map = new HashMap<>();
-			if (!this.plugin.getDB().isEmpty()) for (HikariDB db : this.plugin.getDB()) db.getGroupNodesByUser(this.mappings.keySet().toArray(new String[0])).forEach((k, v) -> map.computeIfAbsent(k, s -> new HashSet<>()).addAll(v));
+			HashMap<UUID, Entry<String, Set<InheritanceNode>>> toAdd = new HashMap<>();
+			HashMap<UUID, Entry<String, Set<InheritanceNode>>> map = new HashMap<>();
+			if (!this.plugin.getDB().isEmpty()) for (HikariDB db : this.plugin.getDB()) db.getGroupNodesByUser(this.mappings.keySet().toArray(new String[0])).forEach((k, v) -> map.computeIfAbsent(k, s -> new SimpleEntry<>(v.getKey(), new HashSet<>())).getValue().addAll(v.getValue()));
 			map.forEach((uuid, nodes) -> {
 				List<InheritanceNode> removable = toRemove.get(uuid);
-				nodes.forEach(node -> {
+				nodes.getValue().forEach(node -> {
 					final InheritanceNode finalNode = node.toBuilder().group(this.mappings.get(node.getGroupName())).build();
 					if (removable == null || !removable.remove(finalNode)) {
-						toAdd.computeIfAbsent(uuid, k -> new HashSet<>()).add(finalNode);
+						toAdd.computeIfAbsent(uuid, k -> new SimpleEntry<>(nodes.getKey(), new HashSet<>())).getValue().add(finalNode);
 					}
 				});
 			});
 			toRemove.entrySet().removeIf(e -> e.getValue().isEmpty());
-			Set<UUID> users = new HashSet<>(toRemove.keySet());
-			users.addAll(toAdd.keySet());
-			if (!users.isEmpty()) for (UUID uuid : new ArrayList<>(users)) {
-				User user = lp.getUserManager().loadUser(uuid).get();
+			Map<UUID, String> users = new HashMap<>();
+			toRemove.forEach((k,v) -> users.put(k, null));
+			toAdd.forEach((k, v) -> users.put(k, v.getKey()));
+			if (!users.isEmpty()) for (Entry<UUID, String> entry : new HashMap<>(users).entrySet()) {
+				if (entry.getValue() != null) lp.getUserManager().savePlayerData(entry.getKey(), entry.getValue()).get();
+				User user = lp.getUserManager().loadUser(entry.getKey()).get();
 				if (user == null) {
-					toRemove.remove(uuid);
-					toAdd.remove(uuid);
-					users.remove(uuid);
+					toRemove.remove(entry.getKey());
+					toAdd.remove(entry.getKey());
+					users.remove(entry.getKey());
 					continue;
 				}
-				if (toRemove.containsKey(uuid)) toRemove.get(uuid).forEach(user.data()::remove);
-				if (toAdd.containsKey(uuid)) toAdd.get(uuid).forEach(user.data()::add);
+				if (toRemove.containsKey(entry.getKey())) toRemove.get(entry.getKey()).forEach(user.data()::remove);
+				if (toAdd.containsKey(entry.getKey())) toAdd.get(entry.getKey()).getValue().forEach(user.data()::add);
 				lp.getUserManager().saveUser(user);
 			}
 			int removed = toRemove.values().stream().mapToInt(List::size).sum();
-			int added = toAdd.values().stream().mapToInt(Set::size).sum();
-			if (!users.isEmpty()) this.plugin.getLogger().info(String.format("Synchronized %d users (%d nodes removed, %d nodes added): %s", users.size(), removed, added, String.join(", ", users.stream().map(plugin.getServer()::getOfflinePlayer).map(p -> p.getName() + "-" + p.getUniqueId()).toArray(String[]::new))));
+			int added = toAdd.values().stream().mapToInt(e -> e.getValue().size()).sum();
+			if (!users.isEmpty()) this.plugin.getLogger().info(String.format("Synchronized %d users (%d nodes removed, %d nodes added): %s", users.size(), removed, added, String.join(", ", users.entrySet().stream().map(e -> e.getValue() + "-" + e.getKey()).toArray(String[]::new))));
 		} catch (Exception e) {
 			e.printStackTrace();
 		}

@@ -9,7 +9,9 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.UUID;
+import java.util.AbstractMap.SimpleEntry;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -156,11 +158,11 @@ public abstract class HikariDB {
 	 * @return map of nodes accessed by users's UUID
 	 * @throws SQLException when cannot establish the connection to the database
 	 */
-	public @Nullable Map<UUID, List<InheritanceNode>> getGroupNodesByUser(@NotNull String... groups) throws SQLException {
+	public @Nullable Map<UUID, Entry<String, List<InheritanceNode>>> getGroupNodesByUser(@NotNull String... groups) throws SQLException {
 		this.checkConnection();
-		Map<UUID, List<InheritanceNode>> groupsByUser = new HashMap<>();
+		Map<UUID, Entry<String, List<InheritanceNode>>> groupsByUser = new HashMap<>();
 		if (groups.length == 0) return groupsByUser;
-		String sql = String.format("SELECT `uuid`, `permission`, `value`, `expiry` FROM `luckperms_user_permissions` WHERE `value` = true AND `permission` IN (%s) AND `server` = 'global' AND `world` = 'global'", String.join(", ", Stream.of(groups).map(s -> "?").toArray(String[]::new)));
+		String sql = String.format("SELECT `players`.`uuid`, `players`.`username`, `perms`.`permission`, `perms`.`value`, `perms`.`expiry` FROM `luckperms_user_permissions` as `perms` INNER JOIN `luckperms_players` as `players` ON `perms`.`uuid` = `players`.`uuid` WHERE `server` = 'global' AND `world` = 'global' AND `permission` IN (%s) AND (`expiry` = 0 OR `expiry` > UNIX_TIMESTAMP())", String.join(", ", Stream.of(groups).map(s -> "?").toArray(String[]::new)));
 		try (Connection conn = this.connect()) {
 			try (PreparedStatement stm = conn.prepareStatement(sql)) {
 				for (int i = groups.length; i > 0;) {
@@ -170,8 +172,9 @@ public abstract class HikariDB {
 				for (String s : groups) str = str.replaceFirst("\\?", "'"+InheritanceNode.builder(s).build().getKey()+"'");
 				try (ResultSet rs = stm.executeQuery()) {
 					while (rs.next()) {
-						groupsByUser.computeIfAbsent(UUID.fromString(rs.getString(1)), k -> new ArrayList<>()).add(
-								(InheritanceNode)Node.builder(rs.getString(2)).value(rs.getBoolean(3)).expiry(rs.getLong(4)).build());
+						final String name = rs.getString(2);
+						groupsByUser.computeIfAbsent(UUID.fromString(rs.getString(1)), k -> new SimpleEntry<>(name, new ArrayList<>())).getValue().add(
+								(InheritanceNode)Node.builder(rs.getString(3)).value(rs.getBoolean(4)).expiry(rs.getLong(5)).build());
 					}
 				}
 			}
@@ -194,7 +197,7 @@ public abstract class HikariDB {
 		metaTypes = Stream.of(metaTypes).map(str -> special.contains(str) ? str : "meta."+str).map(Pattern::quote).toArray(String[]::new);
 		Map<String, List<Node>> metaByGroup = new HashMap<>();
 		if (groups.length == 0 || metaTypes.length == 0) return metaByGroup;
-		String sql = String.format("SELECT `name`, `permission`, `value`, `expiry` FROM `luckperms_group_permissions` WHERE `name` IN (%s) AND `server` = 'global' AND `world` = 'global' AND `permission` RLIKE ?", String.join(", ", Stream.of(groups).map(s -> "?").toArray(String[]::new)));
+		String sql = String.format("SELECT `name`, `permission`, `value`, `expiry` FROM `luckperms_group_permissions` WHERE `name` IN (%s) AND `server` = 'global' AND `world` = 'global' AND `permission` RLIKE ? AND (`expiry` = 0 OR `expiry` > UNIX_TIMESTAMP())", String.join(", ", Stream.of(groups).map(s -> "?").toArray(String[]::new)));
 		try (Connection conn = this.connect()) {
 			try (PreparedStatement stm = conn.prepareStatement(sql)) {
 				for (int i = groups.length; i > 0;) {
