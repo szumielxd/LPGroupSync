@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 import org.bukkit.configuration.serialization.ConfigurationSerialization;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import lombok.Getter;
 import me.szumielxd.lpgroupsync.hikari.DatabaseConfig;
 import me.szumielxd.lpgroupsync.hikari.HikariDB;
 import me.szumielxd.lpgroupsync.hikari.MariaDB;
@@ -16,10 +17,13 @@ import me.szumielxd.lpgroupsync.hikari.PoolOptions;
 public class LPGroupSync extends JavaPlugin {
 	
 	
+	public static final String PREFIX = "§7[§b§lL§3§lP§a§lSync§7] §3";
+	
+	
 	private Config config;
 	private List<HikariDB> databases;
-	private UserGroupUpdater userGroupUpdater;
-	private GroupMetaUpdater groupMetaUpdater;
+	@Getter private UserGroupUpdater userGroupUpdater;
+	@Getter private GroupMetaUpdater groupMetaUpdater;
 	
 	
 	@Override
@@ -27,6 +31,8 @@ public class LPGroupSync extends JavaPlugin {
 		ConfigurationSerialization.registerClass(DatabaseConfig.class);
 		ConfigurationSerialization.registerClass(PoolOptions.class);
 		this.config = new Config(this).init(ConfigKey.values());
+		//
+		this.getCommand("lpgroupsync").setExecutor(new MainCommand(this));
 		//
 		this.getLogger().info("Establishing connection with databases...");
 		this.databases = Collections.unmodifiableList(this.getConfiguration().getList(ConfigKey.DATABASES).stream().map(DatabaseConfig.class::cast)

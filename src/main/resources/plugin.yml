@@ -7,3 +7,9 @@ website: ${parent.url}
 depend: [LuckPerms]
 
 api-version: 1.13
+
+commands:
+  lpgroupsync:
+    aliases: [lpsync]
+    usage: /<command>
+    permission: lpgroupsync.command
