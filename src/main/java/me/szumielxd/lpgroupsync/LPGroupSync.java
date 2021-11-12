@@ -41,8 +41,8 @@ public class LPGroupSync extends JavaPlugin {
 		//
 		this.userGroupUpdater = new UserGroupUpdater(this);
 		this.groupMetaUpdater = new GroupMetaUpdater(this);
-		this.getServer().getScheduler().runTaskTimerAsynchronously(this, this.userGroupUpdater::updateUsers, 20L, 60*20L);
-		this.getServer().getScheduler().runTaskTimerAsynchronously(this, this.groupMetaUpdater::updateGroups, 20L, 60*20L);
+		this.getServer().getScheduler().runTaskTimerAsynchronously(this, this.userGroupUpdater::updateUsers, 20L, 5*60*20L);
+		this.getServer().getScheduler().runTaskTimerAsynchronously(this, this.groupMetaUpdater::updateGroups, 20L, 5*60*20L);
 	}
 	
 	
